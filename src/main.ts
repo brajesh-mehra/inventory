@@ -9,7 +9,7 @@ import { NotFoundExceptionFilter } from './common/filters/not-found-exception.fi
 async function bootstrap() {
   const app = await NestFactory.createMicroservice<MicroserviceOptions>(AppModule, {
     transport: Transport.TCP,
-    options: { host: '127.0.0.1', port: 4003 },
+    options: { host: '0.0.0.0', port: 4003 },
   });
 
   // ✅ Use Global Validation Pipes for DTO validation
