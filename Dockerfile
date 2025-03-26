@@ -3,7 +3,6 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install
 COPY . .
-COPY .env .env
 RUN npm run build
 EXPOSE 4003
 CMD ["node", "dist/main.js"]
