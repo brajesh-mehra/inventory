@@ -1,0 +1,56 @@
+name: Docker CI Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Read and increment version
+        id: versioning
+        run: |
+          VERSION_FILE="VERSION"
+          if [ ! -f "$VERSION_FILE" ]; then
+            echo "1.0.0" > $VERSION_FILE
+          fi
+          CURRENT_VERSION=$(cat $VERSION_FILE)
+          IFS='.' read -r major minor patch <<< "$CURRENT_VERSION"
+          NEW_VERSION="$major.$minor.$((patch + 1))"
+          echo $NEW_VERSION > $VERSION_FILE
+          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        run: |
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/sse-stock-management:${{ env.NEW_VERSION }} .
+          docker tag ${{ secrets.DOCKER_USERNAME }}/sse-stock-management:${{ env.NEW_VERSION }} ${{ secrets.DOCKER_USERNAME }}/sse-stock-management:latest
+
+      - name: Push Docker image
+        run: |
+          docker push ${{ secrets.DOCKER_USERNAME }}/sse-stock-management:${{ env.NEW_VERSION }}
+          docker push ${{ secrets.DOCKER_USERNAME }}/sse-stock-management:latest
+      
+      # - name: Commit and push new version
+      #   env:
+      #     PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+      #   run: |
+      #     git config --global user.name "github-actions[bot]"
+      #     git config --global user.email "github-actions[bot]@users.noreply.github.com"
+      #     git add VERSION
+      #     git commit -m "Bump version to ${{ env.NEW_VERSION }}" || echo "No changes to commit"
+      #     git push https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/${{ github.repository }}.git main
