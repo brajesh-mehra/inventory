@@ -54,3 +54,4 @@ jobs:
       #     git add VERSION
       #     git commit -m "Bump version to ${{ env.NEW_VERSION }}" || echo "No changes to commit"
       #     git push https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/${{ github.repository }}.git main
+      
