@@ -4,6 +4,8 @@ import { MessagePattern, Payload } from '@nestjs/microservices';
 import { CreateStockDto } from './dto/create-stock.dto';
 import { UpdateStockDto } from './dto/update-stock.dto';
 import { isValidObjectId } from 'mongoose';
+import * as xlsx from 'xlsx';
+
 
 @Controller('stock-management')
 export class StockManagementController {
@@ -54,5 +56,24 @@ export class StockManagementController {
             throw new BadRequestException('Invalid stock ID format.');
         }
         return await this.stockManagementService.remove(id);
+    }
+
+    @MessagePattern('uploadStockExcel')
+    async uploadStockExcel(payload: { file: string }) {
+        try {
+            const fileBuffer = Buffer.from(payload.file, 'base64');
+            const workbook = xlsx.read(fileBuffer, { type: 'buffer' });
+            const sheetName = workbook.SheetNames[0];
+            const sheetData = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
+                
+            if (!sheetData.length) {
+                throw new BadRequestException('Excel file is empty');
+            }
+
+            return await this.stockManagementService.saveStockExcelData(sheetData);
+
+        } catch (error) {
+            throw new BadRequestException('Invalid Excel file');
+        }
     }
 }
