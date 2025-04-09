@@ -5,7 +5,7 @@ import mongoose, { Document } from 'mongoose';
 export class StockManagement extends Document {
 
   @Prop({ required: true })
-  cpName: string;
+  companyName: string;
 
   @Prop({ required: true })
   itemName: string;
@@ -16,10 +16,7 @@ export class StockManagement extends Document {
   @Prop({ required: true })
   unit: string;
 
-  @Prop({ required: true })
-  quantity: number;
-
-  @Prop({ default: true }) 
+  @Prop({ default: true })
   isActive: boolean;
 
   @Prop({ default: false })
@@ -28,13 +25,20 @@ export class StockManagement extends Document {
 
 const StockManagementSchema = SchemaFactory.createForClass(StockManagement);
 
+StockManagementSchema.pre(/^find/, function (next) {
+  if (this instanceof mongoose.Query) {
+    this.where({ isDeleted: { $ne: true } });
+  }
+  next();
+});
+
 StockManagementSchema.set('toJSON', {
   transform: function (doc, ret) {
-      delete ret.isActive;
-      delete ret.isDeleted;
-      delete ret.updatedAt;
-      delete ret.__v;
-      return ret;
+    delete ret.isActive;
+    delete ret.isDeleted;
+    delete ret.updatedAt;
+    delete ret.__v;
+    return ret;
   }
 });
 
