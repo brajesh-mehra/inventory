@@ -23,6 +23,11 @@ export class StockManagementController {
         return this.stockManagementService.getAllStockItems(filters);
     }
 
+    @MessagePattern('getDashboardStatistics')
+    async getDashboardStatistics() {
+        return this.stockManagementService.getDashboardStatistics();
+    }
+
     @MessagePattern('getStockById')
     async getStockById(@Payload() { id }: { id: string }) {
         if (!isValidObjectId(id)) throw new BadRequestException('Invalid stock item ID');

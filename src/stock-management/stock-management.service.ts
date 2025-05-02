@@ -82,6 +82,81 @@ export class StockManagementService {
     ]);
   }
 
+  async getDashboardStatistics() {
+    const totalResult = await this.stockTransactionModel.aggregate([
+      {
+        $group: {
+          _id: null,
+          totalInQuantity: {
+            $sum: {
+              $cond: [{ $eq: ['$type', 'IN'] }, '$quantity', 0],
+            },
+          },
+          totalOutQuantity: {
+            $sum: {
+              $cond: [{ $eq: ['$type', 'OUT'] }, '$quantity', 0],
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          totalInQuantity: 1,
+          totalOutQuantity: 1,
+        },
+      },
+    ]);
+
+    const totals = totalResult[0] || { totalInQuantity: 0, totalOutQuantity: 0 };
+
+    const remainingStock = await this.stockTransactionModel.aggregate([
+      {
+        $lookup: {
+          from: 'stockmanagements',
+          localField: 'stockItemId',
+          foreignField: '_id',
+          as: 'stockItem',
+        },
+      },
+      { $unwind: '$stockItem' },
+      {
+        $group: {
+          _id: '$stockItem._id',
+          itemName: { $first: '$stockItem.itemName' },
+          companyName: { $first: '$stockItem.companyName' },
+          totalInQuantity: {
+            $sum: {
+              $cond: [{ $eq: ['$type', 'IN'] }, '$quantity', 0],
+            },
+          },
+          totalOutQuantity: {
+            $sum: {
+              $cond: [{ $eq: ['$type', 'OUT'] }, '$quantity', 0],
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          itemName: 1,
+          companyName: 1,
+          balanceQuantity: { $subtract: ['$totalInQuantity', '$totalOutQuantity'] },
+        },
+      },
+      {
+        $sort: { itemName: 1 },
+      },
+    ]);
+
+    return {
+      totalInQuantity: totals.totalInQuantity,
+      totalOutQuantity: totals.totalOutQuantity,
+      remainingStock,
+    };
+  }
+
 
   // 🔹 Get Stock By ID
   async getStockById(id: string): Promise<StockManagement | null> {
@@ -143,13 +218,13 @@ export class StockManagementService {
     companyName?: string,
   ): Promise<any[]> {
     const stockItem = await this.stockItemModel.findById(stockItemId).lean();
-  
+
     if (!stockItem) throw new NotFoundException('Stock item not found');
-  
+
     if (companyName && stockItem.companyName.toLowerCase() !== companyName.toLowerCase()) {
       throw new NotFoundException('No stock item found for the given company name');
     }
-  
+
     return this.stockTransactionModel.aggregate([
       {
         $match: { stockItemId: new Types.ObjectId(stockItemId) }
