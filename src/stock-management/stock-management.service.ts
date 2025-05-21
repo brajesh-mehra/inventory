@@ -213,69 +213,133 @@ export class StockManagementService {
   }
 
   // 🔹 Get Transactions By Stock Item ID
+
+  // Old code
+
+  // async getTransactionsByStock(
+  //   stockItemId: string,
+  //   companyName?: string,
+  // ): Promise<any[]> {
+  //   const stockItem = await this.stockItemModel.findById(stockItemId).lean();
+
+  //   if (!stockItem) throw new NotFoundException('Stock item not found');
+
+  //   if (companyName && stockItem.companyName.toLowerCase() !== companyName.toLowerCase()) {
+  //     throw new NotFoundException('No stock item found for the given company name');
+  //   }
+
+  //   return this.stockTransactionModel.aggregate([
+  //     {
+  //       $match: { stockItemId: new Types.ObjectId(stockItemId) }
+  //     },
+  //     {
+  //       $addFields: {
+  //         dateOnly: {
+  //           $dateToString: { format: '%Y-%m-%d', date: '$createdAt' }
+  //         }
+  //       }
+  //     },
+  //     {
+  //       $group: {
+  //         _id: '$dateOnly',
+  //         inQuantity: {
+  //           $sum: {
+  //             $cond: [{ $eq: ['$type', 'IN'] }, '$quantity', 0]
+  //           }
+  //         },
+  //         outQuantity: {
+  //           $sum: {
+  //             $cond: [{ $eq: ['$type', 'OUT'] }, '$quantity', 0]
+  //           }
+  //         }
+  //       }
+  //     },
+  //     {
+  //       $sort: { _id: 1 }
+  //     },
+  //     {
+  //       $project: {
+  //         date: '$_id',
+  //         inQuantity: 1,
+  //         outQuantity: 1,
+  //         _id: 0
+  //       }
+  //     }
+  //   ]).then((result) => {
+  //     let balanceQuantity = 0;
+  //     return result.map((entry) => {
+  //       balanceQuantity += (entry.inQuantity || 0) - (entry.outQuantity || 0);
+  //       return {
+  //         companyName: stockItem.companyName,
+  //         itemName: stockItem.itemName,
+  //         itemCode: stockItem.itemCode,
+  //         date: entry.date,
+  //         inQuantity: entry.inQuantity,
+  //         outQuantity: entry.outQuantity,
+  //         balanceQuantity
+  //       };
+  //     });
+  //   });
+  // }
+
+  // New code
   async getTransactionsByStock(
     stockItemId: string,
     companyName?: string,
   ): Promise<any[]> {
+    // 1.  Make sure the stock item exists
     const stockItem = await this.stockItemModel.findById(stockItemId).lean();
-
     if (!stockItem) throw new NotFoundException('Stock item not found');
 
-    if (companyName && stockItem.companyName.toLowerCase() !== companyName.toLowerCase()) {
-      throw new NotFoundException('No stock item found for the given company name');
+    // 2.  Optional company-name guard
+    if (
+      companyName &&
+      stockItem.companyName.toLowerCase() !== companyName.toLowerCase()
+    ) {
+      throw new NotFoundException(
+        'No stock item found for the given company name',
+      );
     }
 
-    return this.stockTransactionModel.aggregate([
-      {
-        $match: { stockItemId: new Types.ObjectId(stockItemId) }
-      },
-      {
-        $addFields: {
-          dateOnly: {
-            $dateToString: { format: '%Y-%m-%d', date: '$createdAt' }
-          }
-        }
-      },
-      {
-        $group: {
-          _id: '$dateOnly',
-          inQuantity: {
-            $sum: {
-              $cond: [{ $eq: ['$type', 'IN'] }, '$quantity', 0]
-            }
+    // 3.  Pull every transaction for this item, oldest → newest
+    const txns = await this.stockTransactionModel
+      .aggregate([
+        { $match: { stockItemId: new Types.ObjectId(stockItemId) } },
+
+        // order is important so the running balance comes out right
+        { $sort: { createdAt: 1 } },
+
+        // shape each document
+        {
+          $project: {
+            _id: 0,
+            date: {
+              $dateToString: { format: '%Y-%m-%d', date: '$createdAt' },
+            },
+            inQuantity: {
+              $cond: [{ $eq: ['$type', 'IN'] }, '$quantity', 0],
+            },
+            outQuantity: {
+              $cond: [{ $eq: ['$type', 'OUT'] }, '$quantity', 0],
+            },
           },
-          outQuantity: {
-            $sum: {
-              $cond: [{ $eq: ['$type', 'OUT'] }, '$quantity', 0]
-            }
-          }
-        }
-      },
-      {
-        $sort: { _id: 1 }
-      },
-      {
-        $project: {
-          date: '$_id',
-          inQuantity: 1,
-          outQuantity: 1,
-          _id: 0
-        }
-      }
-    ]).then((result) => {
-      let balanceQuantity = 0;
-      return result.map((entry) => {
-        balanceQuantity += (entry.inQuantity || 0) - (entry.outQuantity || 0);
-        return {
-          companyName: stockItem.companyName,
-          itemName: stockItem.itemName,
-          itemCode: stockItem.itemCode,
-          date: entry.date,
-          inQuantity: entry.inQuantity,
-          outQuantity: entry.outQuantity,
-          balanceQuantity
-        };
-      });
+        },
+      ])
+      .exec();
+
+    // 4.  Calculate running balance on the Node side
+    let balanceQuantity = 0;
+    return txns.map((t) => {
+      balanceQuantity += (t.inQuantity || 0) - (t.outQuantity || 0);
+      return {
+        companyName: stockItem.companyName,
+        itemName: stockItem.itemName,
+        itemCode: stockItem.itemCode,
+        date: t.date,
+        inQuantity: t.inQuantity,
+        outQuantity: t.outQuantity,
+        balanceQuantity,
+      };
     });
   }
 
